@@ -1,67 +1,51 @@
 import { useEffect, useState } from "react";
-import API from "../api/api";
+import { MockAPI, subscribeToAlerts } from "../mocks/mockApi";
+import type { TurbineAlert } from "../mocks/mockData";
 
-export default function AlertsPanel({ turbineId }) {
-    const [alerts, setAlerts] = useState([]);
+interface AlertsPanelProps {
+    turbineId: string;
+}
+
+const severityStyles: Record<TurbineAlert["severity"], React.CSSProperties> = {
+    critical: { backgroundColor: "#ff4d4f", color: "white" },
+    warning: { backgroundColor: "#faad14", color: "white" },
+    info: { backgroundColor: "#1890ff", color: "white" },
+};
+
+export default function AlertsPanel({ turbineId }: AlertsPanelProps) {
+    const [alerts, setAlerts] = useState<TurbineAlert[]>([]);
 
     useEffect(() => {
-        // 1️⃣ تحميل alerts القديمة من DB
-        API.get(`/alerts?turbineId=${turbineId}`)
-            .then((res) => setAlerts(res.data))
-            .catch((err) => console.error(err));
+        // Load existing alerts
+        MockAPI.getAlerts(turbineId).then(setAlerts);
 
-        // 2️⃣ Realtime via SSE
-        const eventSource = new EventSource(
-            `http://localhost:5199/api/sse/alerts/${turbineId}`
-        );
+        // Subscribe to new alerts
+        const unsubscribe = subscribeToAlerts(turbineId, (newAlert) => {
+            setAlerts((prev) => [newAlert, ...prev].slice(0, 20)); // Keep max 20
+        });
 
-        eventSource.onmessage = (event) => {
-            const newAlert = JSON.parse(event.data);
-            setAlerts((prev) => [newAlert, ...prev.slice(0, 19)]);
-        };
-
-        eventSource.onerror = () => {
-            console.error("SSE connection failed");
-            eventSource.close();
-        };
-
-        return () => eventSource.close();
+        return unsubscribe;
     }, [turbineId]);
-
-    const getSeverityStyle = (severity) => {
-        switch (severity) {
-            case "High":
-                return { backgroundColor: "#ff4d4f", color: "white" };
-            case "Medium":
-                return { backgroundColor: "#faad14", color: "white" };
-            case "Low":
-                return { backgroundColor: "#52c41a", color: "white" };
-            default:
-                return { backgroundColor: "#d9d9d9" };
-        }
-    };
 
     return (
         <div style={{ marginTop: "30px" }}>
-            <h3>Alerts</h3>
+            <h3>⚠️ Alerts</h3>
 
-            {alerts.length === 0 && <p>No alerts</p>}
+            {alerts.length === 0 && <p style={{ color: "#666" }}>No alerts</p>}
 
             {alerts.map((alert) => (
                 <div
                     key={alert.id}
                     style={{
-                        padding: "10px",
+                        padding: "12px",
                         marginBottom: "10px",
                         borderRadius: "6px",
-                        ...getSeverityStyle(alert.severity),
+                        ...severityStyles[alert.severity],
                     }}
                 >
-                    <strong>{alert.severity}</strong>
-                    <p>{alert.message}</p>
-                    <small>
-                        {new Date(alert.timestamp).toLocaleString()}
-                    </small>
+                    <strong style={{ textTransform: "uppercase" }}>{alert.severity}</strong>
+                    <p style={{ margin: "4px 0" }}>{alert.message}</p>
+                    <small>{new Date(alert.timestamp).toLocaleString()}</small>
                 </div>
             ))}
         </div>
