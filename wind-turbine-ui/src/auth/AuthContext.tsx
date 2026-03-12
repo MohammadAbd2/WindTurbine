@@ -16,20 +16,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Check for existing session on mount
     useEffect(() => {
-        const token = localStorage.getItem("token");
-        if (token) {
-            AuthService.validateToken(token)
-                .then((validUser) => {
+        let isMounted = true;
+
+        const checkToken = async () => {
+            const token = localStorage.getItem("token");
+            if (token) {
+                const validUser = await AuthService.validateToken(token);
+                if (isMounted) {
                     if (validUser) {
                         setUser(validUser);
                     } else {
                         localStorage.removeItem("token");
                     }
-                })
-                .finally(() => setIsLoading(false));
-        } else {
-            setIsLoading(false);
-        }
+                    setIsLoading(false);
+                }
+            } else if (isMounted) {
+                setIsLoading(false);
+            }
+        };
+
+        checkToken();
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     const login = async (username: string, password: string) => {
@@ -51,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthContextType {
     const context = useContext(AuthContext);
     if (!context) {

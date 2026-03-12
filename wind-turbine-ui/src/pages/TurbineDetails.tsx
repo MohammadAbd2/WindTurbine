@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import Navbar from "../components/Navbar";
 import MetricsChart from "../components/MetricsChart";
 import AlertsPanel from "../components/AlertsPanel";
 import CommandPanel from "../components/CommandPanel";
-import ThemeSelector from "../components/ThemeSelector";
 import { MockAPI, subscribeToTelemetry } from "../mocks/mockApi";
-import { useAuth } from "../auth/AuthContext";
 import type { Telemetry, Turbine } from "../mocks/mockData";
 
 export default function TurbineDetails() {
     const { id } = useParams<{ id: string }>();
-    const { user, logout } = useAuth();
     const [turbine, setTurbine] = useState<Turbine | null>(null);
     const [telemetryHistory, setTelemetryHistory] = useState<Telemetry[]>([]);
     const [latestTelemetry, setLatestTelemetry] = useState<Telemetry | null>(null);
@@ -39,21 +37,8 @@ export default function TurbineDetails() {
 
     return (
         <div className="min-h-screen bg-base-200">
-            {/* Navbar */}
-            <div className="navbar bg-base-100 shadow-lg">
-                <div className="flex-1">
-                    <Link to="/" className="btn btn-ghost text-xl">🌬️ Wind Turbine Monitor</Link>
-                </div>
-                <div className="flex-none gap-4 px-4">
-                    <ThemeSelector />
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm">👤 {user?.username}</span>
-                        <button onClick={logout} className="btn btn-ghost btn-sm">Logout</button>
-                    </div>
-                </div>
-            </div>
+            <Navbar title={turbine?.name ?? "Turbine Details"} />
 
-            {/* Content */}
             <div className="container mx-auto p-6">
                 <div className="breadcrumbs text-sm mb-4">
                     <ul>
