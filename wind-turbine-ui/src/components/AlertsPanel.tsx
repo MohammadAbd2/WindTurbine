@@ -6,48 +6,46 @@ interface AlertsPanelProps {
     turbineId: string;
 }
 
-const severityStyles: Record<TurbineAlert["severity"], React.CSSProperties> = {
-    critical: { backgroundColor: "#ff4d4f", color: "white" },
-    warning: { backgroundColor: "#faad14", color: "white" },
-    info: { backgroundColor: "#1890ff", color: "white" },
+const severityClasses: Record<TurbineAlert["severity"], string> = {
+    critical: "alert-error",
+    warning: "alert-warning",
+    info: "alert-info",
 };
 
 export default function AlertsPanel({ turbineId }: AlertsPanelProps) {
     const [alerts, setAlerts] = useState<TurbineAlert[]>([]);
 
     useEffect(() => {
-        // Load existing alerts
         MockAPI.getAlerts(turbineId).then(setAlerts);
 
-        // Subscribe to new alerts
         const unsubscribe = subscribeToAlerts(turbineId, (newAlert) => {
-            setAlerts((prev) => [newAlert, ...prev].slice(0, 20)); // Keep max 20
+            setAlerts((prev) => [newAlert, ...prev].slice(0, 20));
         });
 
         return unsubscribe;
     }, [turbineId]);
 
     return (
-        <div style={{ marginTop: "30px" }}>
-            <h3>⚠️ Alerts</h3>
+        <div>
+            <h2 className="card-title mb-4">⚠️ Alerts</h2>
 
-            {alerts.length === 0 && <p style={{ color: "#666" }}>No alerts</p>}
+            {alerts.length === 0 && (
+                <p className="text-base-content/60">No alerts</p>
+            )}
 
-            {alerts.map((alert) => (
-                <div
-                    key={alert.id}
-                    style={{
-                        padding: "12px",
-                        marginBottom: "10px",
-                        borderRadius: "6px",
-                        ...severityStyles[alert.severity],
-                    }}
-                >
-                    <strong style={{ textTransform: "uppercase" }}>{alert.severity}</strong>
-                    <p style={{ margin: "4px 0" }}>{alert.message}</p>
-                    <small>{new Date(alert.timestamp).toLocaleString()}</small>
-                </div>
-            ))}
+            <div className="flex flex-col gap-2">
+                {alerts.map((alert) => (
+                    <div key={alert.id} className={`alert ${severityClasses[alert.severity]} py-2`}>
+                        <div>
+                            <span className="font-bold uppercase mr-2">{alert.severity}</span>
+                            <span>{alert.message}</span>
+                            <span className="text-xs ml-2 opacity-70">
+                                {new Date(alert.timestamp).toLocaleString()}
+                            </span>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

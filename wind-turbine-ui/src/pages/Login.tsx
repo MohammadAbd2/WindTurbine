@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import ThemeSelector from "../components/ThemeSelector";
 
 export default function Login() {
     const { user, login } = useAuth();
@@ -11,7 +12,6 @@ export default function Login() {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
-    // Already logged in? Redirect to dashboard
     if (user) {
         return <Navigate to="/" replace />;
     }
@@ -32,108 +32,62 @@ export default function Login() {
     };
 
     return (
-        <div
-            style={{
-                minHeight: "100vh",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: "#f0f2f5",
-            }}
-        >
-            <div
-                style={{
-                    backgroundColor: "white",
-                    padding: "40px",
-                    borderRadius: "8px",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                    width: "100%",
-                    maxWidth: "400px",
-                }}
-            >
-                <h1 style={{ textAlign: "center", marginBottom: "8px" }}>
-                    🌬️ Wind Turbine Monitor
-                </h1>
-                <p style={{ textAlign: "center", color: "#666", marginBottom: "24px" }}>
-                    Operator Login
-                </p>
+        <div className="min-h-screen bg-base-200 flex items-center justify-center p-4">
+            <div className="absolute top-4 right-4">
+                <ThemeSelector />
+            </div>
 
-                <form onSubmit={handleSubmit}>
-                    <div style={{ marginBottom: "16px" }}>
-                        <label style={{ display: "block", marginBottom: "4px", fontWeight: 500 }}>
-                            Username
-                        </label>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            required
-                            style={{
-                                width: "100%",
-                                padding: "10px",
-                                borderRadius: "4px",
-                                border: "1px solid #d9d9d9",
-                                boxSizing: "border-box",
-                            }}
-                        />
-                    </div>
+            <div className="card bg-base-100 shadow-xl w-full max-w-md">
+                <div className="card-body">
+                    <h1 className="card-title text-2xl justify-center">🌬️ Wind Turbine Monitor</h1>
+                    <p className="text-center text-base-content/60 mb-4">Operator Login</p>
 
-                    <div style={{ marginBottom: "24px" }}>
-                        <label style={{ display: "block", marginBottom: "4px", fontWeight: 500 }}>
-                            Password
-                        </label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            style={{
-                                width: "100%",
-                                padding: "10px",
-                                borderRadius: "4px",
-                                border: "1px solid #d9d9d9",
-                                boxSizing: "border-box",
-                            }}
-                        />
-                    </div>
-
-                    {error && (
-                        <div
-                            style={{
-                                backgroundColor: "#fff2f0",
-                                border: "1px solid #ffccc7",
-                                color: "#ff4d4f",
-                                padding: "10px",
-                                borderRadius: "4px",
-                                marginBottom: "16px",
-                            }}
-                        >
-                            {error}
+                    <form onSubmit={handleSubmit}>
+                        <div className="form-control mb-4">
+                            <label className="label">
+                                <span className="label-text">Username</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                className="input input-bordered w-full"
+                                required
+                            />
                         </div>
-                    )}
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        style={{
-                            width: "100%",
-                            padding: "12px",
-                            backgroundColor: "#1890ff",
-                            color: "white",
-                            border: "none",
-                            borderRadius: "4px",
-                            fontSize: "16px",
-                            cursor: loading ? "not-allowed" : "pointer",
-                            opacity: loading ? 0.7 : 1,
-                        }}
-                    >
-                        {loading ? "Signing in..." : "Sign In"}
-                    </button>
-                </form>
+                        <div className="form-control mb-6">
+                            <label className="label">
+                                <span className="label-text">Password</span>
+                            </label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="input input-bordered w-full"
+                                required
+                            />
+                        </div>
 
-                <p style={{ marginTop: "24px", textAlign: "center", color: "#999", fontSize: "12px" }}>
-                    Demo: operator / operator123
-                </p>
+                        {error && (
+                            <div className="alert alert-error mb-4">
+                                <span>{error}</span>
+                            </div>
+                        )}
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className={`btn btn-primary w-full ${loading ? "loading" : ""}`}
+                        >
+                            {loading ? "Signing in..." : "Sign In"}
+                        </button>
+                    </form>
+
+                    <p className="text-center text-xs text-base-content/50 mt-6">
+                        Demo: operator / operator123
+                    </p>
+                </div>
             </div>
         </div>
     );

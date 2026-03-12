@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import TurbineCard from "../components/TurbineCard";
+import ThemeSelector from "../components/ThemeSelector";
 import { MockAPI } from "../mocks/mockApi";
 import { useAuth } from "../auth/AuthContext";
 import type { Turbine } from "../mocks/mockData";
@@ -17,35 +18,41 @@ export default function Dashboard() {
     }, []);
 
     if (loading) {
-        return <div>Loading turbines...</div>;
+        return (
+            <div className="min-h-screen bg-base-200 flex items-center justify-center">
+                <span className="loading loading-spinner loading-lg"></span>
+            </div>
+        );
     }
 
     return (
-        <div style={{ padding: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                <h1 style={{ margin: 0 }}>Wind Turbine Dashboard</h1>
-                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                    <span style={{ color: "#666" }}>
-                        👤 {user?.username} ({user?.role})
-                    </span>
-                    <button
-                        onClick={logout}
-                        style={{
-                            padding: "8px 16px",
-                            backgroundColor: "#f5f5f5",
-                            border: "1px solid #d9d9d9",
-                            borderRadius: "4px",
-                            cursor: "pointer",
-                        }}
-                    >
-                        Logout
-                    </button>
+        <div className="min-h-screen bg-base-200">
+            {/* Navbar */}
+            <div className="navbar bg-base-100 shadow-lg">
+                <div className="flex-1">
+                    <span className="text-xl font-bold px-4">🌬️ Wind Turbine Monitor</span>
+                </div>
+                <div className="flex-none gap-4 px-4">
+                    <ThemeSelector />
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm">
+                            👤 {user?.username} <span className="badge badge-sm">{user?.role}</span>
+                        </span>
+                        <button onClick={logout} className="btn btn-ghost btn-sm">
+                            Logout
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
-                {turbines.map((t) => (
-                    <TurbineCard key={t.id} turbine={t} />
-                ))}
+
+            {/* Content */}
+            <div className="container mx-auto p-6">
+                <h1 className="text-3xl font-bold mb-6">Turbine Overview</h1>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {turbines.map((t) => (
+                        <TurbineCard key={t.id} turbine={t} />
+                    ))}
+                </div>
             </div>
         </div>
     );
