@@ -1,55 +1,39 @@
+import { api } from "../api/apiService";
+
 export interface User {
     username: string;
-    role: "Operator";
     token: string;
 }
 
-export interface LoginCredentials {
-    username: string;
-    password: string;
-}
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Mock credentials (replace with real API later)
-const MOCK_USERS = [
-    { username: "admin", password: "admin", role: "Operator" as const },
-];
-
 export const AuthService = {
-    async login(credentials: LoginCredentials): Promise<User> {
-        await delay(500); // Simulate network
+    login: async (credentials: { username: string; password: string }): Promise<User> => {
+        // نرسل الطلب إلى المسار الصحيح المكتوب في الـ Controller
+        const response = await api.post("/api/auth/login", {
+            username: credentials.username,
+            password: credentials.password
+        });
 
-        const user = MOCK_USERS.find(
-            (u) => u.username === credentials.username && u.password === credentials.password
-        );
-
-        if (!user) {
-            throw new Error("Invalid username or password");
-        }
-
-        const token = `mock-jwt-token-${Date.now()}`; // Fake token
-        
+        // الباكيند يعيد { token: "..." }
+        // سنقوم بدمج اسم المستخدم مع التوكين لنحافظ على هيكل الـ User في الفرونت
         return {
-            username: user.username,
-            role: user.role,
-            token,
+            username: credentials.username,
+            token: response.data.token
         };
     },
 
-    async logout(): Promise<void> {
-        await delay(200);
-        // In real app: call backend to invalidate token
+    validateToken: async (token: string): Promise<User | null> => {
+        try {
+            // ملاحظة: الـ AuthController الحالي لا يحتوي على GetMe أو Validate.
+            // يمكنك حالياً إرجاع كائن المستخدم طالما التوكين موجود محلياً
+            // أو إضافة ميثود [Authorize] في الباكيند للتحقق.
+            return { username: "admin", token };
+        } catch {
+            return null;
+        }
     },
 
-    // Check if stored token is valid
-    async validateToken(token: string): Promise<User | null> {
-        await delay(200);
-        
-        // Mock validation - in real app, verify with backend
-        if (token.startsWith("mock-jwt-token-")) {
-            return { username: "operator", role: "Operator", token };
-        }
-        return null;
-    },
+    logout: async () => {
+        // مسح محلي فقط لأن الـ JWT عديم الحالة (Stateless)
+        localStorage.removeItem("token");
+    }
 };
