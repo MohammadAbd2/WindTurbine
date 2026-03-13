@@ -87,7 +87,7 @@ export default function Login() {
                     </form>
 
                     <p className="text-center text-xs text-base-content/50 mt-6">
-                        Demo: operator / operator123
+                        Demo: admin / admin
                     </p>
                 </div>
             </div>

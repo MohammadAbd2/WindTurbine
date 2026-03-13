@@ -9,11 +9,15 @@ interface CommandPanelProps {
 export default function CommandPanel({ turbineId }: CommandPanelProps) {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-    
+
     // Form states for commands with parameters
     const [stopReason, setStopReason] = useState("");
     const [intervalValue, setIntervalValue] = useState(10);
     const [pitchAngle, setPitchAngle] = useState(15);
+
+    // UI Feedback states: tracks what is currently active on the turbine
+    const [appliedInterval, setAppliedInterval] = useState(10);
+    const [appliedPitch, setAppliedPitch] = useState(15);
 
     const sendCommand = async (command: TurbineCommand) => {
         setLoading(true);
@@ -22,6 +26,13 @@ export default function CommandPanel({ turbineId }: CommandPanelProps) {
         try {
             const response = await MockAPI.sendCommand(turbineId, command);
             setResult(response);
+
+            // If successful, update our visual tracking states
+            if (response.success) {
+                if (command.action === "setInterval") setAppliedInterval(command.value);
+                if (command.action === "setPitch") setAppliedPitch(command.angle);
+                if (command.action === "start" || command.action === "stop") setStopReason("");
+            }
         } catch {
             setResult({ success: false, message: "Failed to send command" });
         } finally {
@@ -30,82 +41,115 @@ export default function CommandPanel({ turbineId }: CommandPanelProps) {
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {/* Start / Stop */}
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                <button
-                    onClick={() => sendCommand({ action: "start" })}
-                    disabled={loading}
-                    style={{ backgroundColor: "#52c41a", color: "white", padding: "8px 16px", border: "none", borderRadius: "4px", cursor: "pointer" }}
-                >
-                    ▶ Start
-                </button>
-                
-                <input
-                    type="text"
-                    placeholder="Stop reason (optional)"
-                    value={stopReason}
-                    onChange={(e) => setStopReason(e.target.value)}
-                    style={{ padding: "8px", borderRadius: "4px", border: "1px solid #d9d9d9" }}
-                />
-                <button
-                    onClick={() => sendCommand({ action: "stop", reason: stopReason || undefined })}
-                    disabled={loading}
-                    style={{ backgroundColor: "#ff4d4f", color: "white", padding: "8px 16px", border: "none", borderRadius: "4px", cursor: "pointer" }}
-                >
-                    ⏹ Stop
-                </button>
-            </div>
-
-            {/* Set Reporting Interval */}
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                <label>Reporting Interval:</label>
-                <input
-                    type="number"
-                    min={1}
-                    max={60}
-                    value={intervalValue}
-                    onChange={(e) => setIntervalValue(Number(e.target.value))}
-                    style={{ width: "60px", padding: "8px", borderRadius: "4px", border: "1px solid #d9d9d9" }}
-                />
-                <span>seconds (1-60)</span>
-                <button
-                    onClick={() => sendCommand({ action: "setInterval", value: intervalValue })}
-                    disabled={loading}
-                    style={{ padding: "8px 16px", border: "none", borderRadius: "4px", cursor: "pointer" }}
-                >
-                    Set Interval
-                </button>
-            </div>
-
-            {/* Set Blade Pitch */}
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                <label>Blade Pitch:</label>
-                <input
-                    type="number"
-                    min={0}
-                    max={30}
-                    step={0.5}
-                    value={pitchAngle}
-                    onChange={(e) => setPitchAngle(Number(e.target.value))}
-                    style={{ width: "60px", padding: "8px", borderRadius: "4px", border: "1px solid #d9d9d9" }}
-                />
-                <span>degrees (0-30)</span>
-                <button
-                    onClick={() => sendCommand({ action: "setPitch", angle: pitchAngle })}
-                    disabled={loading}
-                    style={{ padding: "8px 16px", border: "none", borderRadius: "4px", cursor: "pointer" }}
-                >
-                    Set Pitch
-                </button>
-            </div>
-
-            {/* Result message */}
+        <div className="flex flex-col gap-6">
+            {/* Global Result Message */}
             {result && (
-                <p style={{ color: result.success ? "#52c41a" : "#ff4d4f", margin: 0 }}>
-                    {result.success ? "✓" : "✗"} {result.message}
-                </p>
+                <div className={`alert ${result.success ? "alert-success text-success-content" : "alert-error text-error-content"} shadow-sm py-2`}>
+                    <span>{result.success ? "✓" : "✗"} {result.message}</span>
+                </div>
             )}
+
+            {/* Quick Actions (Start / Stop) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Start Turbine */}
+                <div className="bg-base-200 rounded-lg p-4 flex flex-col justify-center items-center border border-base-300">
+                    <p className="font-semibold mb-3 text-base-content/80">Resume Operations</p>
+                    <button
+                        className="btn btn-success text-white w-full max-w-xs"
+                        onClick={() => sendCommand({ action: "start" })}
+                        disabled={loading}
+                    >
+                        ▶ Start Turbine
+                    </button>
+                </div>
+
+                {/* Stop Turbine */}
+                <div className="bg-base-200 rounded-lg p-4 flex flex-col justify-center items-center border border-base-300">
+                    <p className="font-semibold mb-3 text-base-content/80">Halt Operations</p>
+                    <div className="w-full max-w-xs flex flex-col gap-2">
+                        <input
+                            type="text"
+                            placeholder="Reason for stopping (optional)..."
+                            className="input input-bordered w-full input-sm"
+                            value={stopReason}
+                            onChange={(e) => setStopReason(e.target.value)}
+                        />
+                        <button
+                            className="btn btn-error text-white w-full"
+                            onClick={() => sendCommand({ action: "stop", reason: stopReason || undefined })}
+                            disabled={loading}
+                        >
+                            ⏹ Stop Turbine
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="divider my-0">Configuration Parameters</div>
+
+            {/* Parameter Settings */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Reporting Interval */}
+                <div className="form-control w-full">
+                    <label className="label">
+                        <span className="label-text font-medium">Reporting Interval (1-60)</span>
+                        {intervalValue !== appliedInterval && (
+                            <span className="label-text-alt text-warning font-semibold">Unsaved</span>
+                        )}
+                    </label>
+                    <div className="join w-full">
+                        <input
+                            type="number"
+                            min={1}
+                            max={60}
+                            className="input input-bordered join-item w-full"
+                            value={intervalValue}
+                            onChange={(e) => setIntervalValue(Number(e.target.value))}
+                        />
+                        <div className="btn btn-disabled join-item rounded-none bg-base-200 border-base-300 text-base-content/70">
+                            sec
+                        </div>
+                        <button
+                            className={`btn join-item w-24 ${intervalValue !== appliedInterval ? "btn-primary" : "btn-neutral"}`}
+                            onClick={() => sendCommand({ action: "setInterval", value: intervalValue })}
+                            disabled={loading || intervalValue === appliedInterval}
+                        >
+                            {intervalValue !== appliedInterval ? "Apply" : "Active"}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Blade Pitch */}
+                <div className="form-control w-full">
+                    <label className="label">
+                        <span className="label-text font-medium">Blade Pitch (0-30)</span>
+                        {pitchAngle !== appliedPitch && (
+                            <span className="label-text-alt text-warning font-semibold">Unsaved</span>
+                        )}
+                    </label>
+                    <div className="join w-full">
+                        <input
+                            type="number"
+                            min={0}
+                            max={30}
+                            step={0.5}
+                            className="input input-bordered join-item w-full"
+                            value={pitchAngle}
+                            onChange={(e) => setPitchAngle(Number(e.target.value))}
+                        />
+                        <div className="btn btn-disabled join-item rounded-none bg-base-200 border-base-300 text-base-content/70">
+                            deg
+                        </div>
+                        <button
+                            className={`btn join-item w-24 ${pitchAngle !== appliedPitch ? "btn-primary" : "btn-neutral"}`}
+                            onClick={() => sendCommand({ action: "setPitch", angle: pitchAngle })}
+                            disabled={loading || pitchAngle === appliedPitch}
+                        >
+                            {pitchAngle !== appliedPitch ? "Apply" : "Active"}
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

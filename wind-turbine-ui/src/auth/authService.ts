@@ -13,7 +13,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Mock credentials (replace with real API later)
 const MOCK_USERS = [
-    { username: "operator", password: "operator123", role: "Operator" as const },
+    { username: "admin", password: "admin", role: "Operator" as const },
 ];
 
 export const AuthService = {

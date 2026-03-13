@@ -74,24 +74,73 @@ export default function TurbineDetails() {
                 {/* Charts */}
                 <div className="card bg-base-100 shadow-md mb-6">
                     <div className="card-body">
-                        <h2 className="card-title">📈 Real-time Metrics</h2>
+                        <h2 className="card-title mb-4">📈 Real-time Metrics</h2>
+
+                        {/* 1. Power Output - Large Scale */}
                         <MetricsChart
                             data={telemetryHistory}
-                            title="Power & Wind"
+                            title="Power Generation"
                             metrics={[
                                 { key: "powerOutput", name: "Power Output (kW)", color: "#22c55e" },
+                            ]}
+                        />
+
+                        {/* 2. Wind Conditions - Small Scale */}
+                        <MetricsChart
+                            data={telemetryHistory}
+                            title="Wind Speed"
+                            metrics={[
                                 { key: "windSpeed", name: "Wind Speed (m/s)", color: "#3b82f6" },
                             ]}
                         />
+
+                        {/* 3. Yaw Alignment - Shared 360 Degree Scale */}
                         <MetricsChart
                             data={telemetryHistory}
-                            title="Temperatures"
+                            title="Yaw Alignment"
+                            metrics={[
+                                { key: "windDirection", name: "Wind Direction (°)", color: "#8b5cf6" },
+                                { key: "nacelleDirection", name: "Nacelle Direction (°)", color: "#d946ef" },
+                            ]}
+                        />
+
+                        {/* 4. Thermal Health - Shared Celsius Scale */}
+                        <MetricsChart
+                            data={telemetryHistory}
+                            title="System Temperatures"
                             metrics={[
                                 { key: "generatorTemp", name: "Generator (°C)", color: "#ef4444" },
                                 { key: "gearboxTemp", name: "Gearbox (°C)", color: "#f97316" },
                                 { key: "ambientTemperature", name: "Ambient (°C)", color: "#06b6d4" },
                             ]}
                         />
+
+                        {/* 5. Mechanical & Structural - Various Scales (Grid Layout for space efficiency) */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6">
+                            <MetricsChart
+                                data={telemetryHistory}
+                                title="Rotor Speed"
+                                metrics={[
+                                    { key: "rotorSpeed", name: "Rotor Speed (rpm)", color: "#eab308" },
+                                ]}
+                            />
+                            <MetricsChart
+                                data={telemetryHistory}
+                                title="Blade Pitch"
+                                metrics={[
+                                    { key: "bladePitch", name: "Blade Pitch (°)", color: "#14b8a6" },
+                                ]}
+                            />
+                            <div className="lg:col-span-2 mt-4">
+                                <MetricsChart
+                                    data={telemetryHistory}
+                                    title="Structural Health (Vibration)"
+                                    metrics={[
+                                        { key: "vibration", name: "Vibration (mm/s)", color: "#9f1239" },
+                                    ]}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
 

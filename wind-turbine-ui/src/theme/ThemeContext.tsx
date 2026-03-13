@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 
-type Theme = "corporate" | "forest";
+type Theme = "light" | "forest";
 
 interface ThemeContextType {
     theme: Theme;
@@ -13,11 +13,11 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
     const [theme, setTheme] = useState<Theme>(() => {
         const saved = localStorage.getItem("theme") as Theme;
-        return saved === "forest" ? "forest" : "corporate";
+        return saved === "forest" ? "forest" : "light";
     });
 
     const toggleTheme = () => {
-        setTheme((prev) => (prev === "corporate" ? "forest" : "corporate"));
+        setTheme((prev) => (prev === "light" ? "forest" : "light"));
     };
 
     useEffect(() => {
