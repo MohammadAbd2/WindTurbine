@@ -23,6 +23,7 @@
 
     <!-- MQTT -->
     <PackageReference Include="Mqtt.Controllers" Version="0.1.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
 
     <!-- Server Sent Events -->
     <PackageReference Include="StateleSSE.AspNetCore" Version="3.1.0" />
