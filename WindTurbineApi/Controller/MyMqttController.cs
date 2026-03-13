@@ -7,19 +7,12 @@ using System.Text.Json.Serialization; // مهم جداً
 
 namespace WindTurbineApi.Controller;
 
-public class TurbineMqttController : MqttController
+public class TurbineMqttController(IServiceScopeFactory scopeFactory) : MqttController
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-
-    public TurbineMqttController(IServiceScopeFactory scopeFactory)
-    {
-        _scopeFactory = scopeFactory;
-    }
-
     [MqttRoute("farm/6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7/windmill/+/telemetry")]
     public async Task HandleMetric(string topic, string payload)
     {
-        using var scope = _scopeFactory.CreateScope();
+        using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<WindTurbineDbContext>();
 
         try

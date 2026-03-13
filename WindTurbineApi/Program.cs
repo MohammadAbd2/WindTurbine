@@ -5,6 +5,7 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using WindTurbineApi.Data;
 using Mqtt.Controllers;
+using StateleSSE.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,8 +20,9 @@ builder.Services.AddDbContext<WindTurbineDbContext>(options =>
 builder.Services.AddControllers();
 
 // ================= MQTT =================
-builder.Services.AddMqttControllers();
-builder.Services.AddHostedService<MqttControllerHostedService>();
+ builder.Services.AddMqttControllers();
+
+
 
 // ================= CORS =================
 builder.Services.AddCors(options =>
@@ -99,7 +101,11 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+
+
+
 // ================= PIPELINE =================
+
 
 // Swagger
 app.UseSwagger();
@@ -126,5 +132,6 @@ using (var scope = app.Services.CreateScope())
         "farm/6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7/windmill/+/telemetry"
     );
 }
+
 
 app.Run();

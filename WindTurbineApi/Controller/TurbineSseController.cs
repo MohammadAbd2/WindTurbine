@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WindTurbineApi.Data;
-using StateleSSE.AspNetCore;
+using System.Text.Json;
 
-namespace WindTurbineApi.Controllers;
+namespace WindTurbineApi.Controller;
 
 [Route("sse")]
 [ApiController]
@@ -19,25 +19,38 @@ public class TurbineSseController : ControllerBase
     [HttpGet("metrics")]
     public async Task GetMetrics(CancellationToken ct)
     {
-        // الحل البديل في حال فشل الـ Extension Method: 
-        // استخدام Response.WriteAsync يدوياً مع الالتزام بمتطلبات المكتبة
+        // 1. إعدادات الـ SSE
         Response.ContentType = "text/event-stream";
-        Response.Headers.Add("Cache-Control", "no-cache");
-        Response.Headers.Add("Connection", "keep-alive");
+        Response.Headers.Append("Cache-Control", "no-cache");
+        Response.Headers.Append("Connection", "keep-alive");
 
+        Console.WriteLine("[SSE] Client connected. Streaming data from DataBase ...");
+
+        // 2. حلقة إرسال البيانات
         while (!ct.IsCancellationRequested)
         {
-            var metrics = await _db.TurbineMetrics
-                .OrderByDescending(m => m.Timestamp)
-                .Take(10)
-                .ToListAsync(ct);
+            try 
+            {
+                // جلب أحدث 15 قراءة مسجلة في قاعدة البيانات
+                var metrics = await _db.TurbineMetrics
+                    .AsNoTracking()
+                    .OrderByDescending(m => m.Timestamp)
+                    .Take(15)
+                    .ToListAsync(ct);
 
-            var json = System.Text.Json.JsonSerializer.Serialize(metrics);
-            
-            // كتابة البيانات بصيغة SSE يدوياً لضمان العمل 100%
-            await Response.WriteAsync($"data: {json}\n\n", ct);
-            await Response.Body.FlushAsync(ct);
+                var json = JsonSerializer.Serialize(metrics);
+                
+                // إرسال البيانات
+                await Response.WriteAsync($"data: {json}\n\n", ct);
+                await Response.Body.FlushAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SSE] Stream Error: {ex.Message}");
+                break; 
+            }
 
+            // تأخير 5 ثوانٍ قبل القراءة التالية من الداتابيز
             await Task.Delay(5000, ct);
         }
     }
