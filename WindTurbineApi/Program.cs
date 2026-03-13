@@ -30,7 +30,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactPolicy", policy =>
     {
-        policy.WithOrigins("http://localhost:5173") 
+        policy.WithOrigins("http://localhost:5173",
+                           "https://wind-turbine-ui.fly.dev/"
+                ) 
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
