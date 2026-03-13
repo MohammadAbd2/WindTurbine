@@ -6,6 +6,7 @@ using System.Text;
 using WindTurbineApi.Data;
 using Mqtt.Controllers;
 using StateleSSE.AspNetCore;
+using WindTurbineApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,7 +41,8 @@ builder.Services.AddCors(options =>
 });
 
 // ================= JWT =================
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "SuperSecretKey123456";
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "YourSuperSecretKeyWithAtLeast32Characters!";
+var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -48,18 +50,25 @@ builder.Services
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Jwt:Audience"],
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtKey)
-            )
+            IssuerSigningKey = new SymmetricSecurityKey(keyBytes)
         };
     });
 
 builder.Services.AddAuthorization();
+
+
+builder.Services.AddControllers()
+    .AddJsonOptions(options => 
+    {
+        // يمنع التكرار اللانهائي في روابط البيانات
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    });
 
 // ================= SWAGGER =================
 builder.Services.AddEndpointsApiExplorer();
@@ -99,6 +108,8 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+
+
 var app = builder.Build();
 
 
@@ -125,12 +136,12 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var mqtt = scope.ServiceProvider.GetRequiredService<IMqttClientService>();
-
     await mqtt.ConnectAsync("broker.hivemq.com", 1883);
 
-    await mqtt.SubscribeAsync(
-        "farm/6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7/windmill/+/telemetry"
-    );
+    // الاشتراك في التليميتري والتنبيهات معاً باستخدام الـ Wildcard (+)
+    await mqtt.SubscribeAsync("farm/6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7/windmill/+/telemetry");
+    await mqtt.SubscribeAsync("farm/6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7/windmill/+/alert");
+    
 }
 
 
