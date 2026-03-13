@@ -64,7 +64,8 @@ public class TurbineDataFetcher : BackgroundService
                             {
                                 TurbineId = t.TurbineId,
                                 Message = $"Status: {t.Status}",
-                                Timestamp = t.Timestamp
+                                Timestamp = t.Timestamp,
+                                Id = null
                             });
                         }
                     }
