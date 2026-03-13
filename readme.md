@@ -135,13 +135,7 @@ Install Docker if not installed.
 Start PostgreSQL container:
 
 ```bash
-docker run -d \
---name windturbine-db \
--e POSTGRES_USER=admin \
--e POSTGRES_PASSWORD=secret \
--e POSTGRES_DB=WindTurbineDb \
--p 5432:5432 \
-postgres:15
+docker run -d --name windturbine-db -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=WindTurbineDb -p 5432:5432 postgres:15
 ```
 
 Check running containers:
