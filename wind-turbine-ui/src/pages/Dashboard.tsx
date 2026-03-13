@@ -3,6 +3,7 @@ import TurbineCard from "../components/TurbineCard";
 import Navbar from "../components/Navbar";
 import { MockAPI } from "../mocks/mockApi";
 import type { Turbine } from "../mocks/mockData";
+import {ApiService} from "../api/apiService.ts";
 
 export default function Dashboard() {
     const [turbines, setTurbines] = useState<Turbine[]>([]);
@@ -13,6 +14,12 @@ export default function Dashboard() {
             .then((data) => setTurbines(data))
             .catch((err) => console.error(err))
             .finally(() => setLoading(false));
+    }, []);
+
+    useEffect(() => {
+        ApiService.getTurbines().then(data => {
+            setTurbines(data);
+        });
     }, []);
 
     // Summary calculations

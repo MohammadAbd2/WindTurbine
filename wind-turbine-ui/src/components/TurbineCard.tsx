@@ -8,6 +8,8 @@ interface TurbineCardProps {
 export default function TurbineCard({ turbine }: TurbineCardProps) {
     const isRunning = turbine.status === "running";
 
+
+
     return (
         <div className={`card bg-base-100 shadow-md border-t-4 ${isRunning ? 'border-t-success' : 'border-t-error'} transition-all hover:-translate-y-1 hover:shadow-xl`}>
             <div className="card-body p-5">

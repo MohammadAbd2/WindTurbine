@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { MockAPI, subscribeToAlerts } from "../mocks/mockApi";
 import type { TurbineAlert } from "../mocks/mockData";
+import { ApiService, getSSEConnection } from "../api/apiService";
 
 interface AlertsPanelProps {
     turbineId: string;
@@ -24,6 +25,26 @@ export default function AlertsPanel({ turbineId }: AlertsPanelProps) {
         });
 
         return unsubscribe;
+    }, [turbineId]);
+
+    useEffect(() => {
+        // 1. جلب التنبيهات القديمة من قاعدة البيانات عبر Swagger
+        ApiService.getAlerts(turbineId)
+            .then(data => {
+                if (data && data.length > 0) setAlerts(data);
+                else MockAPI.getAlerts(turbineId).then(setAlerts); // Fallback للموك
+            })
+            .catch(() => MockAPI.getAlerts(turbineId).then(setAlerts));
+
+        // 2. الاستماع للتنبيهات الحية عبر SSE
+        const sse = getSSEConnection(`/sse/alerts?turbineId=${turbineId}`);
+
+        sse.onmessage = (event) => {
+            const newAlert = JSON.parse(event.data);
+            setAlerts((prev) => [newAlert, ...prev].slice(0, 20));
+        };
+
+        return () => sse.close(); // إغلاق الاتصال عند الخروج
     }, [turbineId]);
 
     return (
