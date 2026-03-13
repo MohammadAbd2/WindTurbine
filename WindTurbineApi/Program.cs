@@ -22,7 +22,6 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
-// ================= MQTT =================
 builder.Services.AddMqttControllers();
 
 // ================= CORS =================
@@ -31,8 +30,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ReactPolicy", policy =>
     {
         policy.WithOrigins("http://localhost:5173",
-                           "https://wind-turbine-ui.fly.dev/"
-                ) 
+                           "https://wind-turbine-ui.fly.dev") // Removed trailing slash for matching
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -48,10 +46,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidateIssuer = false, // Set to false if you haven't configured Issuer in Fly secrets yet
+            ValidateAudience = false, // Set to false for easier initial deployment
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(keyBytes)
@@ -89,26 +85,27 @@ var app = builder.Build();
 
 // ================= PIPELINE =================
 
-// إعداد Swagger ليعمل على الرابط الرئيسي
-if (app.Environment.IsDevelopment())
+// Enable Swagger in PRODUCTION so you can test it on Fly.io
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Wind Turbine API v1");
-        // جعل المسار فارغاً ليعمل Swagger عند http://localhost:5000/ مباشرة
-        options.RoutePrefix = string.Empty; 
-    });
-}
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "Wind Turbine API v1");
+    options.RoutePrefix = string.Empty; 
+});
 
 app.UseCors("ReactPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ================= MQTT CONNECTION =================
+// ================= DATABASE MIGRATIONS & MQTT =================
 using (var scope = app.Services.CreateScope())
 {
+    // 1. Run Migrations (This builds your Neon tables)
+    var db = scope.ServiceProvider.GetRequiredService<WindTurbineDbContext>();
+    await db.Database.MigrateAsync();
+
+    // 2. Start MQTT
     var mqtt = scope.ServiceProvider.GetRequiredService<IMqttClientService>();
     await mqtt.ConnectAsync("broker.hivemq.com", 1883);
     await mqtt.SubscribeAsync("farm/6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7/windmill/+/telemetry");
