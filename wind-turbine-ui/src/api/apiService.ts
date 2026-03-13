@@ -1,11 +1,29 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://localhost:5199"; // تأكد من أنه نفس بورت الباكيند
+const API_BASE_URL = "http://localhost:5199";
 
-const api = axios.create({
+// 1. إنشاء نسخة axios مع إعدادات الأمان الأساسية
+export const api = axios.create({
     baseURL: API_BASE_URL,
+    withCredentials: true, // للسماح بتبادل بيانات الهوية إذا لزم الأمر
 });
 
+// 2. إعداد الـ Interceptor لإضافة التوكين تلقائياً في كل طلب
+api.interceptors.request.use(
+    (config) => {
+        const token = localStorage.getItem("token");
+        if (token) {
+            // إضافة التوكين في الهيدر ليتعرف عليه الـ [Authorize] في C#
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
+// 3. تعريف الخدمات (الطلبات العادية)
 export const ApiService = {
     // جلب كل التوربينات
     getTurbines: async () => {
@@ -26,7 +44,14 @@ export const ApiService = {
     }
 };
 
-// إعداد الـ SSE لاستقبال البيانات الحية
+// 4. إعداد الـ SSE لاستقبال البيانات الحية (مع دعم التوكين)
 export const getSSEConnection = (endpoint: string) => {
-    return new EventSource(`${API_BASE_URL}${endpoint}`);
+    const token = localStorage.getItem("token");
+
+    // بما أن EventSource لا يدعم Headers، نقوم بتمرير التوكين في الرابط
+    // ستحتاج لإعداد الباكيند ليقرأ "access_token" من الرابط في الـ SSE
+    const separator = endpoint.includes("?") ? "&" : "?";
+    const url = `${API_BASE_URL}${endpoint}${token ? `${separator}access_token=${token}` : ""}`;
+
+    return new EventSource(url);
 };
