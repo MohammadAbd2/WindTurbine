@@ -1,11 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
 namespace WindTurbineApi.Controller;
-
 [ApiController]
 [Route("api/auth")]
 public class AuthController(IConfiguration config) : ControllerBase

@@ -9,6 +9,7 @@ using StateleSSE.AspNetCore;
 using WindTurbineApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddInMemorySseBackplane();
 
 // ================= DATABASE =================
 builder.Services.AddDbContext<WindTurbineDbContext>(options =>
@@ -78,8 +79,11 @@ builder.Services.AddSwaggerGen(options =>
             },
             Array.Empty<string>()
         }
-    });
+    }); 
 });
+
+
+
 
 var app = builder.Build();
 

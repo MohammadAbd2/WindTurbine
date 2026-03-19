@@ -16,4 +16,6 @@ public class Alert
     public string? Message { get; init; }
 
     public DateTime Timestamp { get; init; }
+    
+    
 }

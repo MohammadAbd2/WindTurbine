@@ -1,56 +1,55 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using WindTurbineApi.Data;
 using System.Text.Json;
+using StateleSSE.AspNetCore;
+using WindTurbineApi.Data;
 
 namespace WindTurbineApi.Controller;
 
-[Route("sse")]
 [ApiController]
-public class TurbineSseController : ControllerBase
+[Route("sse")]
+public class TurbineSseController(
+    WindTurbineDbContext db,
+    ISseBackplane backplane
+) : RealtimeControllerBase(backplane)
 {
-    private readonly WindTurbineDbContext _db;
-
-    public TurbineSseController(WindTurbineDbContext db)
-    {
-        _db = db;
-    }
-
     [HttpGet("metrics")]
     public async Task GetMetrics(CancellationToken ct)
     {
-        // 1. إعدادات الـ SSE
-        Response.ContentType = "text/event-stream";
-        Response.Headers.Append("Cache-Control", "no-cache");
-        Response.Headers.Append("Connection", "keep-alive");
+        Console.WriteLine("[SSE] Client connected");
 
-        Console.WriteLine("[SSE] Client connected. Streaming data from DataBase ...");
+        try
+        {
+            // إرسال initial snapshot 
+            var metrics = await db.TurbineMetrics
+                .AsNoTracking()
+                .OrderByDescending(m => m.Timestamp)
+                .Take(15)
+                .ToListAsync(ct);
 
-        // 2. حلقة إرسال البيانات
+            var alerts = await db.Alerts
+                .AsNoTracking()
+                .OrderByDescending(a => a.Timestamp)
+                .Take(5)
+                .ToListAsync(ct);
+
+            var payload = new
+            {
+                metrics,
+                alerts
+            };
+
+            // ⚠️ هذه هي الطريقة الوحيدة المتاحة في نسختك
+            await backplane.Clients.SendToAllAsync(payload);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SSE ERROR] {ex.Message}");
+        }
+
+        // إبقاء الاتصال مفتوح (مهم جدًا)
         while (!ct.IsCancellationRequested)
         {
-            try 
-            {
-                // جلب أحدث 15 قراءة مسجلة في قاعدة البيانات
-                var metrics = await _db.TurbineMetrics
-                    .AsNoTracking()
-                    .OrderByDescending(m => m.Timestamp)
-                    .Take(15)
-                    .ToListAsync(ct);
-
-                var json = JsonSerializer.Serialize(metrics);
-                
-                // إرسال البيانات
-                await Response.WriteAsync($"data: {json}\n\n", ct);
-                await Response.Body.FlushAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[SSE] Stream Error: {ex.Message}");
-                break; 
-            }
-
-            // تأخير 5 ثوانٍ قبل القراءة التالية من الداتابيز
             await Task.Delay(5000, ct);
         }
     }

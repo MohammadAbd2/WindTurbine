@@ -1,10 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WindTurbineApi.Data;
 using WindTurbineApi.Entities;
 
 namespace WindTurbineApi.Controller;
-
+[Authorize]
 [ApiController]
 [Route("api/turbines")]
 public class TurbinesController(WindTurbineDbContext db) : ControllerBase

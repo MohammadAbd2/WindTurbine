@@ -17,6 +17,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="MQTTnet" Version="5.1.0.1559" />
 
     <!-- PostgreSQL EF Core Provider -->
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
@@ -26,7 +27,7 @@
     <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
 
     <!-- Server Sent Events -->
-    <PackageReference Include="StateleSSE.AspNetCore" Version="3.1.0" />
+    <PackageReference Include="StateleSSE.AspNetCore" Version="4.0.0-preview.1" />
 
     <!-- Swagger / OpenAPI -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
