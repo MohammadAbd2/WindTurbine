@@ -65,7 +65,7 @@ public class TurbineDataFetcher : BackgroundService
                                 TurbineId = t.TurbineId,
                                 Message = $"Status: {t.Status}",
                                 Timestamp = t.Timestamp,
-                                Id = null
+                                Id = Guid.NewGuid().ToString()
                             });
                         }
                     }
@@ -86,12 +86,12 @@ public class TurbineDataFetcher : BackgroundService
 // DTO for telemetry JSON
 public class TurbineTelemetryDto
 {
-    public string TurbineId { get; set; }
-    public string TurbineName { get; set; }
-    public string FarmId { get; set; }
+    public string TurbineId { get; set; } = string.Empty;
+    public string TurbineName { get; set; } = string.Empty;
+    public string FarmId { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
     public double WindSpeed { get; set; }
     public double AmbientTemperature { get; set; }
     public double PowerOutput { get; set; }
-    public string Status { get; set; }
+    public string Status { get; set; } = string.Empty;
 }

@@ -6,14 +6,16 @@ using System.Text;
 using WindTurbineApi.Data;
 using Mqtt.Controllers;
 using StateleSSE.AspNetCore;
-using WindTurbineApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddInMemorySseBackplane();
+var configuration = builder.Configuration;
+var environment = builder.Environment;
 
 // ================= DATABASE =================
+var connectionString = ResolveConnectionString(configuration);
 builder.Services.AddDbContext<WindTurbineDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+    options.UseNpgsql(connectionString)
 );
 
 // ================= CONTROLLERS & JSON =================
@@ -30,8 +32,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactPolicy", policy =>
     {
-        policy.WithOrigins("http://localhost:5173",
-                           "https://wind-turbine-ui.fly.dev") // Removed trailing slash for matching
+        var allowedOrigins = ResolveAllowedOrigins(configuration);
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -39,7 +41,7 @@ builder.Services.AddCors(options =>
 });
 
 // ================= JWT =================
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "YourSuperSecretKeyWithAtLeast32Characters!";
+var jwtKey = configuration["Jwt:Key"] ?? "THIS_IS_A_SUPER_SECRET_KEY_123456789012345";
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -47,10 +49,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = false, // Set to false if you haven't configured Issuer in Fly secrets yet
-            ValidateAudience = false, // Set to false for easier initial deployment
+            ValidateIssuer = !string.IsNullOrWhiteSpace(configuration["Jwt:Issuer"]),
+            ValidateAudience = !string.IsNullOrWhiteSpace(configuration["Jwt:Audience"]),
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
+            ValidIssuer = configuration["Jwt:Issuer"],
+            ValidAudience = configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(keyBytes)
         };
     });
@@ -88,8 +92,6 @@ builder.Services.AddSwaggerGen(options =>
 var app = builder.Build();
 
 // ================= PIPELINE =================
-
-// Enable Swagger in PRODUCTION so you can test it on Fly.io
 app.UseSwagger();
 app.UseSwaggerUI(options =>
 {
@@ -100,20 +102,83 @@ app.UseSwaggerUI(options =>
 app.UseCors("ReactPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapGet("/health", () => Results.Ok(new { status = "ok", environment = environment.EnvironmentName }));
 app.MapControllers();
 
 // ================= DATABASE MIGRATIONS & MQTT =================
 using (var scope = app.Services.CreateScope())
 {
-    // 1. Run Migrations (This builds your Neon tables)
     var db = scope.ServiceProvider.GetRequiredService<WindTurbineDbContext>();
-    await db.Database.MigrateAsync();
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    await EnsureDatabaseAsync(db, logger);
 
-    // 2. Start MQTT
     var mqtt = scope.ServiceProvider.GetRequiredService<IMqttClientService>();
-    await mqtt.ConnectAsync("broker.hivemq.com", 1883);
-    await mqtt.SubscribeAsync("farm/6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7/windmill/+/telemetry");
-    await mqtt.SubscribeAsync("farm/6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7/windmill/+/alert");
+    await TryStartMqttAsync(mqtt, configuration, logger);
 }
 
 app.Run();
+
+static string ResolveConnectionString(IConfiguration configuration)
+{
+    var databaseUrl = configuration["DATABASE_URL"];
+    if (!string.IsNullOrWhiteSpace(databaseUrl))
+    {
+        return databaseUrl;
+    }
+
+    var connectionString = configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("No database connection string was configured.");
+    }
+
+    return connectionString;
+}
+
+static string[] ResolveAllowedOrigins(IConfiguration configuration)
+{
+    var configuredOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+    if (configuredOrigins is { Length: > 0 })
+    {
+        return configuredOrigins;
+    }
+
+    return
+    [
+        "http://localhost:5173",
+        "https://wind-turbine-ui.fly.dev"
+    ];
+}
+
+static async Task EnsureDatabaseAsync(WindTurbineDbContext db, ILogger logger)
+{
+    var migrations = db.Database.GetMigrations();
+    if (migrations.Any())
+    {
+        await db.Database.MigrateAsync();
+        logger.LogInformation("Applied Entity Framework migrations.");
+        return;
+    }
+
+    await db.Database.EnsureCreatedAsync();
+    logger.LogInformation("Database ensured without migrations because none were found in the assembly.");
+}
+
+static async Task TryStartMqttAsync(IMqttClientService mqtt, IConfiguration configuration, ILogger logger)
+{
+    var host = configuration["Mqtt:Host"] ?? "broker.hivemq.com";
+    var port = int.TryParse(configuration["Mqtt:Port"], out var configuredPort) ? configuredPort : 1883;
+    var farmId = configuration["Mqtt:FarmId"] ?? "6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7";
+
+    try
+    {
+        await mqtt.ConnectAsync(host, port);
+        await mqtt.SubscribeAsync($"farm/{farmId}/windmill/+/telemetry");
+        await mqtt.SubscribeAsync($"farm/{farmId}/windmill/+/alert");
+        logger.LogInformation("MQTT client connected to {Host}:{Port} for farm {FarmId}.", host, port, farmId);
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "MQTT startup failed. The API will continue running without live MQTT ingestion.");
+    }
+}
