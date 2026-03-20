@@ -1,173 +1,178 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import Navbar from "../components/Navbar";
-import MetricsChart from "../components/MetricsChart";
+import { Link, useParams } from "react-router-dom";
+import { ApiService, connectAlertsStream, connectMetricsStream } from "../api/apiService";
 import AlertsPanel from "../components/AlertsPanel";
 import CommandPanel from "../components/CommandPanel";
-import { MockAPI, subscribeToTelemetry } from "../mocks/mockApi";
-import type { Telemetry, Turbine } from "../mocks/mockData";
+import MetricsChart from "../components/MetricsChart";
+import Navbar from "../components/Navbar";
+import type { ApiMetric, ApiStreamAlert, ApiTurbine } from "../types/api";
+import { getLatestMetric, mapAlertEntityToStream, sortAlertsDesc, sortMetricsDesc, stripSeverityPrefix } from "../utils/turbine";
 
 export default function TurbineDetails() {
     const { id } = useParams<{ id: string }>();
-    const [turbine, setTurbine] = useState<Turbine | null>(null);
-    const [telemetryHistory, setTelemetryHistory] = useState<Telemetry[]>([]);
-    const [latestTelemetry, setLatestTelemetry] = useState<Telemetry | null>(null);
+    const [turbine, setTurbine] = useState<ApiTurbine | null>(null);
+    const [metrics, setMetrics] = useState<ApiMetric[]>([]);
+    const [alerts, setAlerts] = useState<ApiStreamAlert[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [streamState, setStreamState] = useState("Connecting to turbine stream");
 
     useEffect(() => {
-        if (!id) return;
-        MockAPI.getTurbine(id).then((t) => setTurbine(t ?? null));
-        MockAPI.getTelemetryHistory(id).then((history) => {
-            setTelemetryHistory(history);
-            if (history.length > 0) {
-                setLatestTelemetry(history[history.length - 1]);
+        if (!id) {
+            return;
+        }
+        const turbineId = id;
+
+        let active = true;
+
+        async function load() {
+            try {
+                const [turbineData, metricsData, alertsData] = await Promise.all([
+                    ApiService.getTurbineById(turbineId),
+                    ApiService.getMetrics(turbineId),
+                    ApiService.getAlerts(turbineId),
+                ]);
+
+                if (!active) {
+                    return;
+                }
+
+                setTurbine(turbineData);
+                setMetrics(metricsData.sort(sortMetricsDesc));
+                setAlerts(alertsData.map(mapAlertEntityToStream).sort(sortAlertsDesc));
+            } finally {
+                if (active) {
+                    setLoading(false);
+                }
             }
-        });
+        }
+
+        void load();
+
+        return () => {
+            active = false;
+        };
     }, [id]);
 
     useEffect(() => {
-        if (!id) return;
-        const unsubscribe = subscribeToTelemetry(id, (newTelemetry) => {
-            setLatestTelemetry(newTelemetry);
-            setTelemetryHistory((prev) => [...prev.slice(-19), newTelemetry]);
-        });
-        return unsubscribe;
+        if (!id) {
+            return;
+        }
+
+        const metricsSource = connectMetricsStream(
+            id,
+            (payload) => {
+                setMetrics((current) => {
+                    const merged = [...current];
+                    payload.metrics.forEach((metric) => {
+                        if (!merged.some((entry) => entry.id === metric.id)) {
+                            merged.push(metric);
+                        }
+                    });
+                    return merged.sort(sortMetricsDesc).slice(0, 50);
+                });
+
+                setAlerts((current) => {
+                    const existingIds = new Set(current.map((alert) => alert.id));
+                    const incoming = payload.alerts
+                        .filter((alert) => !existingIds.has(alert.id))
+                        .map((alert) => ({
+                            id: alert.id,
+                            turbineId: alert.turbineId,
+                            farmId: "6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7",
+                            severity: "info" as const,
+                            message: stripSeverityPrefix(alert.message),
+                            timestamp: alert.timestamp,
+                        }));
+
+                    return [...incoming, ...current].sort(sortAlertsDesc).slice(0, 20);
+                });
+
+                setStreamState("Metrics SSE live");
+            },
+            () => setStreamState("Metrics SSE reconnecting"),
+        );
+
+        const alertsSource = connectAlertsStream(
+            id,
+            (payload) => {
+                setAlerts(payload.alerts.sort(sortAlertsDesc));
+                setStreamState("Metrics and alerts SSE live");
+            },
+            () => setStreamState("Alerts SSE reconnecting"),
+        );
+
+        return () => {
+            metricsSource.close();
+            alertsSource.close();
+        };
     }, [id]);
 
-    if (!id) return <div className="p-8">Invalid turbine ID</div>;
+    if (!id) {
+        return <div className="p-8">Invalid turbine ID.</div>;
+    }
+
+    if (loading) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-base-200">
+                <span className="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+        );
+    }
+
+    if (!turbine) {
+        return (
+            <div className="p-8">
+                <p>Turbine not found.</p>
+                <Link to="/" className="link link-primary">Return to dashboard</Link>
+            </div>
+        );
+    }
+
+    const latestMetric = getLatestMetric(metrics);
 
     return (
         <div className="min-h-screen bg-base-200">
-            <Navbar title={turbine?.name ?? "Turbine Details"} />
+            <Navbar title={turbine.name} streamLabel={streamState} />
 
-            <div className="container mx-auto p-6">
-                <div className="breadcrumbs text-sm mb-4">
-                    <ul>
-                        <li><Link to="/">Dashboard</Link></li>
-                        <li>{turbine?.name ?? "Loading..."}</li>
-                    </ul>
+            <main className="mx-auto max-w-7xl p-6">
+                <div className="mb-6 flex flex-wrap items-center gap-3 text-sm text-base-content/60">
+                    <Link to="/" className="link link-hover">Dashboard</Link>
+                    <span>/</span>
+                    <span>{turbine.id}</span>
                 </div>
 
-                {/* Turbine Header */}
-                <div className="flex items-center gap-4 mb-6">
-                    <h1 className="text-3xl font-bold">{turbine?.name}</h1>
-                    {turbine && (
-                        <span className={`badge badge-lg ${turbine.status === "running" ? "badge-success" : "badge-error"}`}>
-                            {turbine.status}
-                        </span>
-                    )}
-                </div>
-                {turbine && <p className="text-base-content/60 mb-6">📍 {turbine.location}</p>}
+                <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                    <DetailStat label="Location" value={turbine.location} />
+                    <DetailStat label="Wind Speed" value={latestMetric ? `${latestMetric.windSpeed.toFixed(1)} m/s` : "No data"} />
+                    <DetailStat label="Temperature" value={latestMetric ? `${latestMetric.temperature.toFixed(1)} C` : "No data"} />
+                    <DetailStat label="Power Output" value={latestMetric ? `${latestMetric.powerOutput.toFixed(1)} kW` : "No data"} />
+                    <DetailStat label="Updated" value={latestMetric ? new Date(latestMetric.timestamp).toLocaleString() : "Awaiting telemetry"} />
+                </section>
 
-                {/* Live Stats */}
-                {latestTelemetry && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
-                        <StatCard label="Wind Speed" value={`${latestTelemetry.windSpeed} m/s`} />
-                        <StatCard label="Power Output" value={`${latestTelemetry.powerOutput} kW`} />
-                        <StatCard label="Rotor Speed" value={`${latestTelemetry.rotorSpeed} rpm`} />
-                        <StatCard label="Blade Pitch" value={`${latestTelemetry.bladePitch}°`} />
-                        <StatCard label="Generator Temp" value={`${latestTelemetry.generatorTemp}°C`} />
-                        <StatCard label="Gearbox Temp" value={`${latestTelemetry.gearboxTemp}°C`} />
-                        <StatCard label="Vibration" value={`${latestTelemetry.vibration} mm/s`} />
-                    </div>
-                )}
+                <section className="mb-6">
+                    <MetricsChart data={metrics} />
+                </section>
 
-                {/* Charts */}
-                <div className="card bg-base-100 shadow-md mb-6">
-                    <div className="card-body">
-                        <h2 className="card-title mb-4">📈 Real-time Metrics</h2>
-
-                        {/* 1. Power Output - Large Scale */}
-                        <MetricsChart
-                            data={telemetryHistory}
-                            title="Power Generation"
-                            metrics={[
-                                { key: "powerOutput", name: "Power Output (kW)", color: "#22c55e" },
-                            ]}
-                        />
-
-                        {/* 2. Wind Conditions - Small Scale */}
-                        <MetricsChart
-                            data={telemetryHistory}
-                            title="Wind Speed"
-                            metrics={[
-                                { key: "windSpeed", name: "Wind Speed (m/s)", color: "#3b82f6" },
-                            ]}
-                        />
-
-                        {/* 3. Yaw Alignment - Shared 360 Degree Scale */}
-                        <MetricsChart
-                            data={telemetryHistory}
-                            title="Yaw Alignment"
-                            metrics={[
-                                { key: "windDirection", name: "Wind Direction (°)", color: "#8b5cf6" },
-                                { key: "nacelleDirection", name: "Nacelle Direction (°)", color: "#d946ef" },
-                            ]}
-                        />
-
-                        {/* 4. Thermal Health - Shared Celsius Scale */}
-                        <MetricsChart
-                            data={telemetryHistory}
-                            title="System Temperatures"
-                            metrics={[
-                                { key: "generatorTemp", name: "Generator (°C)", color: "#ef4444" },
-                                { key: "gearboxTemp", name: "Gearbox (°C)", color: "#f97316" },
-                                { key: "ambientTemperature", name: "Ambient (°C)", color: "#06b6d4" },
-                            ]}
-                        />
-
-                        {/* 5. Mechanical & Structural - Various Scales (Grid Layout for space efficiency) */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6">
-                            <MetricsChart
-                                data={telemetryHistory}
-                                title="Rotor Speed"
-                                metrics={[
-                                    { key: "rotorSpeed", name: "Rotor Speed (rpm)", color: "#eab308" },
-                                ]}
-                            />
-                            <MetricsChart
-                                data={telemetryHistory}
-                                title="Blade Pitch"
-                                metrics={[
-                                    { key: "bladePitch", name: "Blade Pitch (°)", color: "#14b8a6" },
-                                ]}
-                            />
-                            <div className="lg:col-span-2 mt-4">
-                                <MetricsChart
-                                    data={telemetryHistory}
-                                    title="Structural Health (Vibration)"
-                                    metrics={[
-                                        { key: "vibration", name: "Vibration (mm/s)", color: "#9f1239" },
-                                    ]}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Controls */}
-                <div className="card bg-base-100 shadow-md mb-6">
-                    <div className="card-body">
-                        <h2 className="card-title">🎛️ Controls</h2>
+                <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+                    <div className="rounded-[1.5rem] border border-base-300 bg-base-100 p-6 shadow-md">
+                        <h2 className="mb-4 text-lg font-semibold">Operator Commands</h2>
                         <CommandPanel turbineId={id} />
                     </div>
-                </div>
 
-                {/* Alerts */}
-                <div className="card bg-base-100 shadow-md">
-                    <div className="card-body">
-                        <AlertsPanel turbineId={id} />
+                    <div className="rounded-[1.5rem] border border-base-300 bg-base-100 p-6 shadow-md">
+                        <AlertsPanel alerts={alerts} />
                     </div>
-                </div>
-            </div>
+                </section>
+            </main>
         </div>
     );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function DetailStat({ label, value }: { label: string; value: string }) {
     return (
-        <div className="stat bg-base-100 rounded-lg shadow-sm p-4">
-            <div className="stat-title text-xs">{label}</div>
-            <div className="stat-value text-lg">{value}</div>
+        <div className="rounded-[1.5rem] border border-base-300 bg-base-100 p-5 shadow-sm">
+            <p className="text-sm text-base-content/55">{label}</p>
+            <p className="mt-2 text-lg font-semibold">{value}</p>
         </div>
     );
 }

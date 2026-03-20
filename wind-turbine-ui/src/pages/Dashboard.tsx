@@ -1,33 +1,114 @@
 import { useEffect, useState } from "react";
-import TurbineCard from "../components/TurbineCard";
+import { ApiService, connectAlertsStream, connectMetricsStream } from "../api/apiService";
 import Navbar from "../components/Navbar";
-import { MockAPI } from "../mocks/mockApi";
-import type { Turbine } from "../mocks/mockData";
-import {ApiService} from "../api/apiService.ts";
+import TurbineCard from "../components/TurbineCard";
+import type { ApiStreamAlert, ApiTurbine, TurbineViewModel } from "../types/api";
+import { deriveStatus, getLatestMetric, mapAlertEntityToStream, mapTurbineToViewModel, sortAlertsDesc } from "../utils/turbine";
+
+function mergeFleetState(
+    turbines: ApiTurbine[],
+    liveMetricsByTurbine: Record<string, ApiTurbine["metrics"][number]>,
+    liveAlertsByTurbine: Record<string, ApiStreamAlert[]>,
+): TurbineViewModel[] {
+    return turbines.map((turbine) => {
+        const fallbackMetric = getLatestMetric(turbine.metrics);
+        const latestMetric = liveMetricsByTurbine[turbine.id] ?? fallbackMetric;
+        const alerts = (liveAlertsByTurbine[turbine.id] ?? turbine.alerts.map(mapAlertEntityToStream)).sort(sortAlertsDesc);
+
+        return {
+            ...mapTurbineToViewModel(turbine),
+            latestMetric,
+            alerts,
+            status: deriveStatus(latestMetric),
+        };
+    });
+}
 
 export default function Dashboard() {
-    const [turbines, setTurbines] = useState<Turbine[]>([]);
+    const [turbines, setTurbines] = useState<ApiTurbine[]>([]);
+    const [fleet, setFleet] = useState<TurbineViewModel[]>([]);
     const [loading, setLoading] = useState(true);
+    const [streamState, setStreamState] = useState("Connecting to stateless SSE");
 
     useEffect(() => {
-        MockAPI.getTurbines()
-            .then((data) => setTurbines(data))
-            .catch((err) => console.error(err))
-            .finally(() => setLoading(false));
+        let active = true;
+
+        async function load() {
+            try {
+                const data = await ApiService.getTurbines();
+                if (!active) {
+                    return;
+                }
+
+                setTurbines(data);
+                setFleet(data.map(mapTurbineToViewModel));
+            } finally {
+                if (active) {
+                    setLoading(false);
+                }
+            }
+        }
+
+        void load();
+
+        return () => {
+            active = false;
+        };
     }, []);
 
     useEffect(() => {
-        ApiService.getTurbines().then(data => {
-            setTurbines(data);
-        });
-    }, []);
+        if (turbines.length === 0) {
+            return;
+        }
 
-    // Summary calculations
-    const activeCount = turbines.filter(t => t.status === "running").length;
+        const latestMetrics: Record<string, ApiTurbine["metrics"][number]> = {};
+        const latestAlerts: Record<string, ApiStreamAlert[]> = {};
+
+        const syncFleet = () => {
+            setFleet(mergeFleetState(turbines, latestMetrics, latestAlerts));
+        };
+
+        const metricsSource = connectMetricsStream(
+            null,
+            (payload) => {
+                payload.metrics.forEach((metric) => {
+                    const existing = latestMetrics[metric.turbineId];
+                    if (!existing || new Date(metric.timestamp).getTime() >= new Date(existing.timestamp).getTime()) {
+                        latestMetrics[metric.turbineId] = metric;
+                    }
+                });
+                setStreamState("Metrics SSE live");
+                syncFleet();
+            },
+            () => setStreamState("Metrics SSE reconnecting"),
+        );
+
+        const alertsSource = connectAlertsStream(
+            null,
+            (payload) => {
+                payload.alerts.forEach((alert) => {
+                    latestAlerts[alert.turbineId] = [...(latestAlerts[alert.turbineId] ?? []), alert]
+                        .sort(sortAlertsDesc)
+                        .slice(0, 5);
+                });
+                setStreamState("Metrics and alerts SSE live");
+                syncFleet();
+            },
+            () => setStreamState("Alerts SSE reconnecting"),
+        );
+
+        return () => {
+            metricsSource.close();
+            alertsSource.close();
+        };
+    }, [turbines]);
+
+    const activeCount = fleet.filter((turbine) => turbine.status === "running").length;
+    const totalPower = fleet.reduce((sum, turbine) => sum + (turbine.latestMetric?.powerOutput ?? 0), 0);
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-base-200 flex items-center justify-center">
+            <div className="flex min-h-screen items-center justify-center bg-base-200">
                 <span className="loading loading-spinner loading-lg text-primary"></span>
             </div>
         );
@@ -35,39 +116,40 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen bg-base-200">
-            <Navbar />
+            <Navbar streamLabel={streamState} />
 
-            <div className="container mx-auto p-6">
-                {/* IoT Farm Header */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <div className="badge badge-primary badge-outline font-mono text-xs">FARM-ID: f525fdb5-4455-4bce-a4ac-86a89bd3f103</div>
-                            <div className="badge badge-ghost badge-outline text-xs">MQTT CONNECTED</div>
-                        </div>
-                        <h1 className="text-4xl font-extrabold tracking-tight">Wind Farm Overview</h1>
+            <main className="mx-auto max-w-7xl p-6">
+                <section className="mb-8 grid gap-4 lg:grid-cols-[2fr_1fr]">
+                    <div className="rounded-[2rem] border border-base-300 bg-gradient-to-br from-cyan-950 to-slate-900 p-8 text-cyan-50 shadow-xl">
+                        <p className="mb-3 text-xs uppercase tracking-[0.3em] text-cyan-200/70">Wind Farm Control</p>
+                        <h1 className="text-4xl font-black tracking-tight">Backend-driven turbine overview</h1>
+                        <p className="mt-3 max-w-2xl text-sm text-cyan-100/80">
+                            Initial state is loaded from Swagger-backed REST endpoints, then updated from stateless SSE snapshots emitted by the API.
+                        </p>
                     </div>
 
-                    {/* Quick Stats Summary */}
-                    <div className="stats shadow bg-base-100 border border-base-300">
-                        <div className="stat py-2 px-4">
-                            <div className="stat-title text-xs">Active Turbines</div>
-                            <div className="stat-value text-2xl text-success">{activeCount}/4</div>
-                        </div>
-                        <div className="stat py-2 px-4 border-l border-base-300">
-                            <div className="stat-title text-xs">System Health</div>
-                            <div className="stat-value text-2xl">{activeCount === 4 ? "100%" : "75%"}</div>
-                        </div>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                        <StatCard label="Turbines" value={`${fleet.length}`} helper={`${activeCount} running`} />
+                        <StatCard label="Power Output" value={`${totalPower.toFixed(1)} kW`} helper="Latest fleet snapshot" />
                     </div>
-                </div>
+                </section>
 
-                {/* Fixed 4-Column Grid for exactly 4 turbines */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {turbines.map((t) => (
-                        <TurbineCard key={t.id} turbine={t} />
+                <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+                    {fleet.map((turbine) => (
+                        <TurbineCard key={turbine.id} turbine={turbine} />
                     ))}
-                </div>
-            </div>
+                </section>
+            </main>
+        </div>
+    );
+}
+
+function StatCard({ label, value, helper }: { label: string; value: string; helper: string }) {
+    return (
+        <div className="rounded-[1.5rem] border border-base-300 bg-base-100 p-5 shadow-md">
+            <p className="text-sm text-base-content/60">{label}</p>
+            <p className="mt-2 text-3xl font-bold">{value}</p>
+            <p className="mt-1 text-xs text-base-content/50">{helper}</p>
         </div>
     );
 }
