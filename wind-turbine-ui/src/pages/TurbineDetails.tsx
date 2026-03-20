@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiService, connectAlertsStream, connectMetricsStream } from "../api/apiService";
 import AlertsPanel from "../components/AlertsPanel";
@@ -15,6 +15,8 @@ export default function TurbineDetails() {
     const [alerts, setAlerts] = useState<ApiStreamAlert[]>([]);
     const [loading, setLoading] = useState(true);
     const [streamState, setStreamState] = useState("Connecting to turbine stream");
+    const metricsBufferRef = useRef<ApiMetric[]>([]);
+    const alertsBufferRef = useRef<ApiStreamAlert[]>([]);
 
     useEffect(() => {
         if (!id) {
@@ -39,6 +41,8 @@ export default function TurbineDetails() {
                 setTurbine(turbineData);
                 setMetrics(metricsData.sort(sortMetricsDesc));
                 setAlerts(alertsData.map(mapAlertEntityToStream).sort(sortAlertsDesc));
+                metricsBufferRef.current = metricsData.sort(sortMetricsDesc);
+                alertsBufferRef.current = alertsData.map(mapAlertEntityToStream).sort(sortAlertsDesc);
             } finally {
                 if (active) {
                     setLoading(false);
@@ -58,36 +62,36 @@ export default function TurbineDetails() {
             return;
         }
 
+        const applyBufferedUpdates = window.setInterval(() => {
+            setMetrics([...metricsBufferRef.current]);
+            setAlerts([...alertsBufferRef.current]);
+        }, 5000);
+
         const metricsSource = connectMetricsStream(
             id,
             (payload) => {
-                setMetrics((current) => {
-                    const merged = [...current];
-                    payload.metrics.forEach((metric) => {
-                        if (!merged.some((entry) => entry.id === metric.id)) {
-                            merged.push(metric);
-                        }
-                    });
-                    return merged.sort(sortMetricsDesc).slice(0, 50);
+                const mergedMetrics = [...metricsBufferRef.current];
+                payload.metrics.forEach((metric) => {
+                    if (!mergedMetrics.some((entry) => entry.id === metric.id)) {
+                        mergedMetrics.push(metric);
+                    }
                 });
+                metricsBufferRef.current = mergedMetrics.sort(sortMetricsDesc).slice(0, 50);
 
-                setAlerts((current) => {
-                    const existingIds = new Set(current.map((alert) => alert.id));
-                    const incoming = payload.alerts
-                        .filter((alert) => !existingIds.has(alert.id))
-                        .map((alert) => ({
-                            id: alert.id,
-                            turbineId: alert.turbineId,
-                            farmId: "6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7",
-                            severity: "info" as const,
-                            message: stripSeverityPrefix(alert.message),
-                            timestamp: alert.timestamp,
-                        }));
+                const existingIds = new Set(alertsBufferRef.current.map((alert) => alert.id));
+                const incoming = payload.alerts
+                    .filter((alert) => !existingIds.has(alert.id))
+                    .map((alert) => ({
+                        id: alert.id,
+                        turbineId: alert.turbineId,
+                        farmId: "6dc34e0e-30ad-4fde-9a2e-3a98b4ea9df7",
+                        severity: "info" as const,
+                        message: stripSeverityPrefix(alert.message),
+                        timestamp: alert.timestamp,
+                    }));
 
-                    return [...incoming, ...current].sort(sortAlertsDesc).slice(0, 20);
-                });
-
-                setStreamState("Metrics SSE live");
+                alertsBufferRef.current = [...incoming, ...alertsBufferRef.current].sort(sortAlertsDesc).slice(0, 20);
+                setStreamState("Metrics SSE buffered at 5s");
             },
             () => setStreamState("Metrics SSE reconnecting"),
         );
@@ -95,13 +99,14 @@ export default function TurbineDetails() {
         const alertsSource = connectAlertsStream(
             id,
             (payload) => {
-                setAlerts(payload.alerts.sort(sortAlertsDesc));
-                setStreamState("Metrics and alerts SSE live");
+                alertsBufferRef.current = [...payload.alerts].sort(sortAlertsDesc);
+                setStreamState("Metrics and alerts buffered at 5s");
             },
             () => setStreamState("Alerts SSE reconnecting"),
         );
 
         return () => {
+            window.clearInterval(applyBufferedUpdates);
             metricsSource.close();
             alertsSource.close();
         };

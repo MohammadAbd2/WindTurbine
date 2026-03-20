@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiService, connectAlertsStream, connectMetricsStream } from "../api/apiService";
 import Navbar from "../components/Navbar";
 import TurbineCard from "../components/TurbineCard";
@@ -29,6 +29,8 @@ export default function Dashboard() {
     const [fleet, setFleet] = useState<TurbineViewModel[]>([]);
     const [loading, setLoading] = useState(true);
     const [streamState, setStreamState] = useState("Connecting to stateless SSE");
+    const metricsBufferRef = useRef<Record<string, ApiTurbine["metrics"][number]>>({});
+    const alertsBufferRef = useRef<Record<string, ApiStreamAlert[]>>({});
 
     useEffect(() => {
         let active = true;
@@ -61,24 +63,27 @@ export default function Dashboard() {
             return;
         }
 
-        const latestMetrics: Record<string, ApiTurbine["metrics"][number]> = {};
-        const latestAlerts: Record<string, ApiStreamAlert[]> = {};
+        metricsBufferRef.current = {};
+        alertsBufferRef.current = {};
 
         const syncFleet = () => {
-            setFleet(mergeFleetState(turbines, latestMetrics, latestAlerts));
+            setFleet(mergeFleetState(turbines, metricsBufferRef.current, alertsBufferRef.current));
         };
+
+        const applyBufferedUpdates = window.setInterval(() => {
+            syncFleet();
+        }, 5000);
 
         const metricsSource = connectMetricsStream(
             null,
             (payload) => {
                 payload.metrics.forEach((metric) => {
-                    const existing = latestMetrics[metric.turbineId];
+                    const existing = metricsBufferRef.current[metric.turbineId];
                     if (!existing || new Date(metric.timestamp).getTime() >= new Date(existing.timestamp).getTime()) {
-                        latestMetrics[metric.turbineId] = metric;
+                        metricsBufferRef.current[metric.turbineId] = metric;
                     }
                 });
-                setStreamState("Metrics SSE live");
-                syncFleet();
+                setStreamState("Metrics SSE buffered at 5s");
             },
             () => setStreamState("Metrics SSE reconnecting"),
         );
@@ -87,17 +92,17 @@ export default function Dashboard() {
             null,
             (payload) => {
                 payload.alerts.forEach((alert) => {
-                    latestAlerts[alert.turbineId] = [...(latestAlerts[alert.turbineId] ?? []), alert]
+                    alertsBufferRef.current[alert.turbineId] = [...(alertsBufferRef.current[alert.turbineId] ?? []), alert]
                         .sort(sortAlertsDesc)
                         .slice(0, 5);
                 });
-                setStreamState("Metrics and alerts SSE live");
-                syncFleet();
+                setStreamState("Metrics and alerts buffered at 5s");
             },
             () => setStreamState("Alerts SSE reconnecting"),
         );
 
         return () => {
+            window.clearInterval(applyBufferedUpdates);
             metricsSource.close();
             alertsSource.close();
         };
